@@ -11,6 +11,7 @@
 #include <linux/mutex.h>
 #include <linux/hrtimer.h>
 #include <linux/ktime.h>
+#include <linux/kernel.h>
 
 
 MODULE_LICENSE("GPL");
@@ -24,8 +25,9 @@ MODULE_INFO(intree, "Y");
 
 
 /**************** IRQ *******************/
-
-#define OPTO_HYSTERESIS_TIME	260U * USEC_TO_NANOSEC
+#define DEFAULT_OPTO_HYSTERESIS	320U * USEC_TO_NANOSEC
+#define CALIB_BUFFER_LENGTH		256
+#define CALIB_TIME_MS			2000
 static unsigned int irqNumber;
 static struct acline_time {
 	ktime_t timestamp;
@@ -33,18 +35,26 @@ static struct acline_time {
 	ktime_t period_time;
 } acline_phase;
 
+static struct calib {
+	ktime_t period_pos[CALIB_BUFFER_LENGTH];
+	ktime_t period_neg[CALIB_BUFFER_LENGTH];
+	unsigned int samples_pos;
+	unsigned int samples_neg;
+	unsigned int opto_hysteresis;
+} calibration;
 
 static int irq_start(void);
 static void irq_end(void);
 static irq_handler_t gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs);
 static irq_handler_t gpio_irq_handler_thread(unsigned int irq, void *dev_id, struct pt_regs *regs);
+static irq_handler_t calibration_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs);
 
 
 /**************** SYSFS *****************/
-
 #define SYSFS_NODE  "triacboard"
 
 static struct kobject *triac_kobject;
+
 
 static int sysfs_start(void);
 static void sysfs_end(void);
@@ -54,7 +64,6 @@ static ssize_t get_acline(struct kobject *kobj, struct kobj_attribute *attr, cha
 
 
 /***************** GPIO ********************/
-
 //ARM GPIO pin number
 #define TRIAC1					26
 #define TRIAC2					19
@@ -112,15 +121,14 @@ static struct triac_status triac [] = {
 	{TRIAC4, GPIOF_OUT_INIT_LOW, "triac4", enabled, __ATTR(4, 0664, get_triac, set_triac)},
 	{ACLINE, GPIOF_IN, "lineAC", enabled, __ATTR(freq, 0444, get_acline, NULL)}
 };
-
 static size_t triac_vector_len = ARRAY_SIZE(triac);
+
 
 static int gpio_start(void);
 static void gpio_end(void);
 
 
 /************************ THREADS ***************************/
-
 #define THREAD_NAME 			"triacdrv_loop"
 #define THREAD_LATENCY_TIMEOUT	100U * MSEC_TO_NANOSEC
 #define STOPPED					0x00
@@ -133,15 +141,28 @@ static struct task_struct *update_task;
 static DEFINE_MUTEX(freqx100_lock);
 static unsigned int freqx100;
 
+
 static int update_thread_start(void);
 static void update_thread_end(void);
 int update_thread(void *data);
+static void state_machine_set_off(unsigned int i);
+static void state_machine_set_on(unsigned int i);
+static void state_machine_set_sym(unsigned int i);
+static void state_machine_set_asym(unsigned int i);
+
 static void triac_phase_thread_start(unsigned int channel);
 static void triac_phase_thread_end(unsigned int channel);
 int triac_phase_thread(void *data);
+static void threads_init(void);
+static void threads_end(void);
+
+
+/************************ FADER ***************************/
 static void triac_fade_thread_start(unsigned int i, unsigned int fade_stop_phase, unsigned int fade_time);
 static void triac_fade_thread_end(unsigned int i);
 int fade_thread(void *data);
+static void fader_init(void);
+static void fader_end(void);
 
 
 /*************** MODULE ******************/

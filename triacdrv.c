@@ -1,11 +1,9 @@
 #include "triacdrv.h"
+
 //TODO agregar autodeteccion de EEPROM channels
-//	 autocalibrar adelanto de fase del optotriac OPTO_HYSTERESIS_TIME
-
-// crear start y end de fader (matar faders aca) y de threads (matar threads aca)
 
 
-/**************** SYSFS *****************/
+/********************** SYSFS *******************************/
 static int sysfs_start(void)
 {
 	unsigned int i; 
@@ -22,8 +20,6 @@ static int sysfs_start(void)
 				}
 				else {
 					printk(KERN_INFO "%s on GPIO %02u: accesible on /sys/%s/%s\n", triac[i].label, triac[i].gpio, SYSFS_NODE, triac[i].sysfs.attr.name);
-					atomic_set(&triac[i].phase_task_status, STOPPED);
-					atomic_set(&triac[i].fade_task_status, STOPPED);
 					triac[i].gpio_status = enabled;
 					retval = 0; //At least one SYSFS configured. Clear error
 				}
@@ -36,11 +32,6 @@ static int sysfs_start(void)
 
 static void sysfs_end(void)
 {
-	unsigned int i;
-
-	//If running, stop all running child threads
-	for (i=0; i<(triac_vector_len - 1); i++) triac_fade_thread_end(i);
-
 	kobject_put(triac_kobject);
 	return;
 }
@@ -112,7 +103,6 @@ static ssize_t set_triac(struct kobject *kobj, struct kobj_attribute *attr, cons
 	return count;
 }
 
-
 static ssize_t get_triac(struct kobject *kobj, struct kobj_attribute *attr, char *buff)
 {
 	unsigned int channel;
@@ -155,7 +145,6 @@ static ssize_t get_triac(struct kobject *kobj, struct kobj_attribute *attr, char
 	return count;
 }
 
-
 static ssize_t get_acline(struct kobject *kobj, struct kobj_attribute *attr, char *buff)
 {
 	int count, i;
@@ -180,7 +169,27 @@ static ssize_t get_acline(struct kobject *kobj, struct kobj_attribute *attr, cha
 }
 
 
+
 /************************ FADER *****************************/
+static void fader_init(void)
+{
+	unsigned int i;
+	
+	for (i=0; i < triac_vector_len; i++)
+		atomic_set(&triac[i].fade_task_status, STOPPED);
+	
+	return;
+}
+
+static void fader_end(void)
+{
+	unsigned int i;
+	
+	for (i=0; i<(triac_vector_len - 1); i++)
+		triac_fade_thread_end(i);
+	
+	return;
+}
 
 static void triac_fade_thread_start(unsigned int i, unsigned int fade_stop_phase, unsigned int fade_time)
 {
@@ -280,7 +289,27 @@ int fade_thread(void *data)
 }
 
 
+
 /************************ THREADS ***************************/
+static void threads_init(void)
+{
+	unsigned int i;
+	
+	for (i=0; i < triac_vector_len; i++)
+		atomic_set(&triac[i].phase_task_status, STOPPED);
+	
+	return;
+}
+
+static void threads_end(void)
+{
+	unsigned int i;
+	
+	for (i=0; i<(triac_vector_len - 1); i++)
+		triac_phase_thread_end(i);
+	
+	return;
+}
 
 static int update_thread_start(void)
 {
@@ -301,7 +330,6 @@ static int update_thread_start(void)
 static void update_thread_end(void)
 {
 	if (!IS_ERR_OR_NULL(update_task)) {
-// 		wake_up_process(update_task);
 		kthread_stop(update_task);
 	}
 	return;
@@ -341,7 +369,6 @@ static inline void state_machine_set_asym(unsigned int i)
 	return;
 }
 
-
 int update_thread(void *data)
 {
 	/*** Main thread loop that updates frequency and TRIAC parameters ***/
@@ -361,8 +388,6 @@ int update_thread(void *data)
 		timeout_val = schedule_hrtimeout(&latency, HRTIMER_MODE_REL);
 		
 		if (kthread_should_stop()) { //Stop all running child threads
-			for (i=0; i<(triac_vector_len - 1); i++)
-				triac_phase_thread_end(i);
 			printk(KERN_INFO "update thread: stopped\n");
 			return 0;
 		}
@@ -522,7 +547,7 @@ static inline void triac_phase_thread_start(unsigned int param)
 		wake_up_process(triac[i].phase_task);
 	}
 	else
-		printk(KERN_INFO "%s thread: %d - already running\n", triac[i].label, atomic_read(&triac[i].phase_task_status));
+		printk(KERN_INFO "%s thread: 0x%02X - already running\n", triac[i].label, atomic_read(&triac[i].phase_task_status));
 	
 	return;
 }
@@ -531,12 +556,11 @@ static inline void triac_phase_thread_end(unsigned int i)
 {
 	if (atomic_read(&triac[i].phase_task_status) == STARTED) {
 		atomic_set(&triac[i].phase_task_status, ABOUT_TO_STOP);
-// 		wake_up_process(triac[i].phase_task); //Wake up thread if it was sleeping
 		kthread_stop(triac[i].phase_task); //Send STOP signal
 		atomic_set(&triac[i].phase_task_status, STOPPED);
 	}
 	else
-		printk(KERN_INFO "%s thread: %d - not running\n", triac[i].label, atomic_read(&triac[i].phase_task_status));
+		printk(KERN_INFO "%s thread: 0x%02X - not running\n", triac[i].label, atomic_read(&triac[i].phase_task_status));
 	
 	return;
 }
@@ -587,7 +611,7 @@ int triac_phase_thread(void *data)
 				//Begin TRIAC trigger on negative cycle
 				my_timestamp = ktime_get(); //Get new timestamp for time error calculation
 				error_timestamp = ktime_sub(my_timestamp, local_acline_phase.timestamp); //Calculate latency between IRQ and now
-				neg_trigger_time = ktime_sub(ktime_set(0, local_phase.neg_ns + OPTO_HYSTERESIS_TIME), error_timestamp);
+				neg_trigger_time = ktime_sub(ktime_set(0, local_phase.neg_ns + calibration.opto_hysteresis), error_timestamp);
 				set_current_state(TASK_UNINTERRUPTIBLE);
 				schedule_hrtimeout(&neg_trigger_time, HRTIMER_MODE_REL); //Go to sleep
 				gpio_set_value(triac[i].gpio, 1); //Turn on TRIAC
@@ -602,7 +626,7 @@ int triac_phase_thread(void *data)
 				/*Begin TRIAC trigger on positive cycle*/
 				my_timestamp = ktime_get(); //Get new timestamp for time error calculation
 				error_timestamp = ktime_sub(my_timestamp, local_acline_phase.timestamp); //Calculate latency between IRQ and now
-				pos_trigger_time = ktime_add_ns(ktime_sub(half_period_time, error_timestamp), local_phase.pos_ns + OPTO_HYSTERESIS_TIME);
+				pos_trigger_time = ktime_add_ns(ktime_sub(half_period_time, error_timestamp), local_phase.pos_ns + calibration.opto_hysteresis);
 				set_current_state(TASK_UNINTERRUPTIBLE);
 				schedule_hrtimeout(&pos_trigger_time, HRTIMER_MODE_REL); //Go to sleep
 				gpio_set_value(triac[i].gpio, 1); //Turn on TRIAC
@@ -619,18 +643,110 @@ int triac_phase_thread(void *data)
 }
 
 
+
 /*********************** IRQ ***********************/
+u64 int_pow(u64 base, unsigned int exp)
+{
+	u64 result = 1;
+	
+	while (exp) {
+		if (exp & 1)
+			result *= base;
+		exp >>= 1;
+		base *= base;
+	}
+	
+	return result;
+}
+
+static int irq_calibrate(void)
+{
+	unsigned int i;
+	unsigned int accum;
+	unsigned int avg_pos, avg_neg;
+	unsigned int std_pos, std_neg;
+	
+	irqNumber = gpio_to_irq(ACLINE);
+	calibration.samples_pos = 0;
+	calibration.samples_neg = 0;
+	acline_phase.timestamp = 0;
+	
+	if (request_irq(irqNumber, (irq_handler_t)calibration_irq_handler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "calibrateAC", NULL))
+		printk(KERN_ERR "IRQ %d: could not request\n", irqNumber);
+	else {
+		msleep(CALIB_TIME_MS);
+		free_irq(irqNumber, NULL);
+		
+		if (calibration.samples_pos && calibration.samples_neg) {
+			for (i = 0, accum = 0; i < calibration.samples_pos; i++)
+				accum += ktime_to_ns(calibration.period_pos[i]);
+			
+			avg_pos = accum / i;
+			
+			for (i = 0, accum = 0; i < calibration.samples_pos; i++)
+				accum += int_pow((ktime_to_ns(calibration.period_pos[i]) - avg_pos), 2);
+			
+			std_pos = int_sqrt(accum / i);
+// 			printk(KERN_INFO "POS: Samples: %u\tAvg: %u\tStd: %u\n", calibration.samples_pos, avg_pos, std_pos);
+			
+			
+			
+			for (i = 0, accum = 0; i < calibration.samples_neg; i++)
+				accum += ktime_to_ns(calibration.period_neg[i]);
+			
+			avg_neg = accum / i;
+			
+			for (i = 0, accum = 0; i < calibration.samples_neg; i++)
+				accum += int_pow((ktime_to_ns(calibration.period_neg[i]) - avg_neg), 2);
+			
+			std_neg = int_sqrt(accum / i);
+// 			printk(KERN_INFO "NEG: Samples: %u\tAvg: %u\tStd: %u\n", calibration.samples_neg, avg_neg, std_neg);
+			
+			
+			if (std_neg < (50 * USEC_TO_NANOSEC) && std_pos < (50 * USEC_TO_NANOSEC)) {
+				calibration.opto_hysteresis = (avg_neg - avg_pos) / 4;
+				return 0; //IRQ calibrated. Clear error
+			}
+		}
+	}
+	
+	return -1;
+}
+
+static irq_handler_t calibration_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs)
+{
+	if(!acline_phase.timestamp) //First run
+		acline_phase.timestamp = ktime_get();
+	else {
+		if (calibration.samples_pos < CALIB_BUFFER_LENGTH && calibration.samples_neg < CALIB_BUFFER_LENGTH) {//Avoid overflow
+			if (gpio_get_value(ACLINE)) { //pos finish. neg start
+				acline_phase.old_timestamp = acline_phase.timestamp; //Backup old timestamp for period calculation
+				acline_phase.timestamp = ktime_get(); //Get new timestamp
+				calibration.period_pos[calibration.samples_pos] = ktime_to_ns(ktime_sub(acline_phase.timestamp, acline_phase.old_timestamp)); //Calculate time difference
+				calibration.samples_pos ++;
+			}
+			else { //neg finish. pos start
+				acline_phase.old_timestamp = acline_phase.timestamp; //Backup old timestamp for period calculation
+				acline_phase.timestamp = ktime_get(); //Get new timestamp
+				calibration.period_neg[calibration.samples_neg] = ktime_to_ns(ktime_sub(acline_phase.timestamp, acline_phase.old_timestamp)); //Calculate time difference
+				calibration.samples_neg ++;
+			}
+		}
+	}
+	
+	return (irq_handler_t)IRQ_HANDLED;
+}
+
 static int irq_start(void)
 {   
-	int retval = -EIO; //Start with error
 	irqNumber = gpio_to_irq(ACLINE);
 	
 	if (request_threaded_irq(irqNumber, (irq_handler_t)gpio_irq_handler, (irq_handler_t)gpio_irq_handler_thread, IRQF_TRIGGER_RISING, "lineAC", NULL)) {
 		printk(KERN_ERR "IRQ %d: could not request\n", irqNumber);
+		return -EIO;
 	}
-	else retval = 0; //IRQ configured. Clear error
-	
-	return retval;
+	else 
+		return 0;
 }
 	
 static void irq_end(void)
@@ -649,16 +765,18 @@ static irq_handler_t gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_
 		acline_phase.period_time = ktime_sub(acline_phase.timestamp, acline_phase.old_timestamp); //Calculate time difference
 		
 		//Calculations ready, wake up update task
-		if (!IS_ERR_OR_NULL(update_task)) wake_up_process(update_task); //Now we have OPTO_HYSTERESIS_TIME to perform complex calculations
+		if (!IS_ERR_OR_NULL(update_task))
+			wake_up_process(update_task); //Now we have OPTO_HYSTERESIS_TIME to perform complex calculations
 		return (irq_handler_t)IRQ_WAKE_THREAD;
 	}
-	else return (irq_handler_t)IRQ_HANDLED;
+	else
+		return (irq_handler_t)IRQ_HANDLED;
 }
 
 static irq_handler_t gpio_irq_handler_thread(unsigned int irq, void *dev_id, struct pt_regs *regs)
 {
 	unsigned int i;
-	ktime_t delay = ktime_set(0, OPTO_HYSTERESIS_TIME);
+	ktime_t delay = ktime_set(0, calibration.opto_hysteresis - 50 * USEC_TO_NANOSEC);
 	
 	schedule_hrtimeout(&delay, HRTIMER_MODE_REL); //Go to sleep, then wake up triac phase threads
 	
@@ -670,6 +788,7 @@ static irq_handler_t gpio_irq_handler_thread(unsigned int irq, void *dev_id, str
 	
 	return (irq_handler_t)IRQ_HANDLED;	  // Announce that the IRQ has been handled correctly
 }
+
 
 
 /********************** GPIO *********************/
@@ -704,12 +823,13 @@ static void gpio_end(void)
 	for (i=0; i < triac_vector_len; i++) { //GPIO release
 		if (triac[i].gpio_status != disabled) {
 			gpio_free(triac[i].gpio);
-			printk(KERN_INFO "%s: GPIO %d released\n", triac[i].label, triac[i].gpio);
+			printk(KERN_INFO "%s: GPIO %02d released\n", triac[i].label, triac[i].gpio);
 		}
 	}
 	
 	return;
 }
+
 
 
 /********************** MODULE *********************/
@@ -720,19 +840,33 @@ static int __init triac_init(void)
 	printk(KERN_INFO "Opto-TRIAC Board: Initializing...\n");
 	
 	err = gpio_start();
-	if (err) goto fail_gpio; //Critical fail
+	if (err)
+		goto fail_gpio; //Critical fail
 	
 	err = sysfs_start();
-	if (err) goto fail_sysfs; //Critical fail
+	if (err)
+		goto fail_sysfs; //Critical fail
+	
+	threads_init();
 	
 	err = update_thread_start();
-	if (err) goto fail_thread; //Critical fail
+	if (err)
+		goto fail_thread; //Critical fail
 	
+	printk(KERN_INFO "Opto-TRIAC Board: calibrating AC Line...\n");
+	if (irq_calibrate()) {
+		printk(KERN_ERR "Opto-TRIAC Board: AC Line very unstable\n");
+		calibration.opto_hysteresis = DEFAULT_OPTO_HYSTERESIS;
+	}
+	else
+		printk(KERN_INFO "Opto-TRIAC Board: optocoupler hysteresis = %uus\n", calibration.opto_hysteresis / 1000);
+		
 	if (irq_start())
-		printk(KERN_INFO "Opto-TRIAC Board: READY but no phase sync\n");
+		printk(KERN_ERR "Opto-TRIAC Board: READY but no phase sync\n");
 	else
 		printk(KERN_INFO "Opto-TRIAC Board: READY!\n");
 	
+	fader_init();
 	return 0;
 	
 	fail_thread:	sysfs_end();
@@ -741,14 +875,14 @@ static int __init triac_init(void)
 					return err;
 }
 
-
 static void __exit triac_exit(void)
 {
-	
 	printk(KERN_INFO "Opto-TRIAC Board: Stopping...\n");
 	
+	fader_end();
 	irq_end();
 	update_thread_end();
+	threads_end();
 	sysfs_end();
 	gpio_end();
 	

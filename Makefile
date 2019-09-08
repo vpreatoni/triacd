@@ -1,5 +1,4 @@
 obj-m := triacdrv.o
-triacdrv-objs+= fader.o
 
 ccflags-y := -std=gnu99 -Wno-declaration-after-statement -Wno-unused-result
 MY_CFLAGS += -g -DDEBUG
