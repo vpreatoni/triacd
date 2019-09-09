@@ -19,6 +19,9 @@ MODULE_AUTHOR("Victor Preatoni");
 MODULE_DESCRIPTION("OpenIndoor Opto-TRIAC Board driver");
 MODULE_VERSION("0.1");
 MODULE_INFO(intree, "Y");
+MODULE_SOFTDEP("pre: i2c_dev");
+MODULE_SOFTDEP("pre: at24");
+
 #define USEC_TO_NANOSEC			1000U
 #define MSEC_TO_NANOSEC			1000U * USEC_TO_NANOSEC
 #define SEC_TO_NANOSEC			1000U * MSEC_TO_NANOSEC
