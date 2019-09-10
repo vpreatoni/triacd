@@ -36,18 +36,57 @@ ktime_t acline_get_sync_timestamp(void)
 }
 EXPORT_SYMBOL(acline_get_sync_timestamp);
 
-/* period (in ns) of AC mains */
+
+/* period (in ns) of AC mains
+ * If period is out of bounds, returns 0
+ */
 unsigned int acline_get_period(void)
 {
 	ktime_t local_period_time;
+	unsigned int period_ns;
 	
 	spin_lock_irqsave(&acline_phase.lock, acline_phase.spin_flags);
 	local_period_time = acline_phase.period_time;
 	spin_unlock_irqrestore(&acline_phase.lock, acline_phase.spin_flags);
 	
-	return ((unsigned int)ktime_to_ns(local_period_time));
+	period_ns = (unsigned int)ktime_to_ns(local_period_time);
+	/* Limit calculation to normal mains Hz boundary */
+	if (period_ns > MIN_PERIOD_ns && period_ns < MAX_PERIOD_ns)
+		return period_ns;
+	else
+		return 0;
 }
 EXPORT_SYMBOL(acline_get_period);
+
+
+/* Returns opto_hysteresis time so TRIACs can compensate
+ * trigger time
+ */
+unsigned int acline_get_optohyst(void)
+{
+	return calibration.opto_hysteresis;
+}
+EXPORT_SYMBOL(acline_get_optohyst);
+
+/* Returns irq number used to syncronize
+ * TRIACs on zero-crossing phase
+ */
+unsigned int acline_get_irq(void)
+{
+	return irqNumber;
+}
+EXPORT_SYMBOL(acline_get_irq);
+
+
+/* Returns sysfs kobject to create new nodes
+ * on the same triacd directory
+ */
+struct kobject * acline_get_kobject(void)
+{
+	return acline_kobject;
+}
+EXPORT_SYMBOL(acline_get_kobject);
+
 
 
 /* SYSFS section to allow reading AC mains
@@ -59,11 +98,11 @@ static int acline_sysfs_start(void)
 
 	if (acline_kobject) {
 		if (sysfs_create_file(acline_kobject, &sysfs.attr)) {
-			printk(KERN_ERR " AC LINE: failed to create sysfs\n");
+			printk(KERN_ERR "AC LINE: failed to create sysfs\n");
 			return -EIO;
 		}
 		else {
-			printk(KERN_INFO "AC LINE: frequency on /sys/%s/%s\n", SYSFS_NODE, sysfs.attr.name);
+			printk(KERN_INFO "AC LINE: frequency on /sys/%s/%s\n", acline_kobject->name, sysfs.attr.name);
 			return 0;
 		}
 	}
@@ -151,11 +190,11 @@ static int acline_irq_calibrate(void)
 	calibration.samples_neg = 0;
 	acline_phase.timestamp = 0;
 	
-	if (request_irq(irqNumber, (irq_handler_t)acline_calibration_irq_handler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "calibrateAC", NULL))
+	if (request_irq(irqNumber, (irq_handler_t)acline_calibration_irq_handler, IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING, "calibrateAC", (void *)(acline_calibration_irq_handler)))
 		printk(KERN_ERR "IRQ %d: could not request\n", irqNumber);
 	else {
 		msleep(CALIB_TIME_MS);
-		free_irq(irqNumber, NULL);
+		free_irq(irqNumber, (void *)(acline_calibration_irq_handler));
 		
 		/* Only process data if we have some measurements */
 		if (calibration.samples_pos && calibration.samples_neg) {
@@ -180,7 +219,7 @@ static int acline_irq_calibrate(void)
 			 */
 			if (std_neg < (50 * USEC_TO_NANOSEC) && std_pos < (50 * USEC_TO_NANOSEC)) {
 				calibration.opto_hysteresis = (avg_neg - avg_pos) / 4;
-				return 0; //IRQ calibrated.
+				return 0; /* IRQ calibrated */
 			}
 		}
 	}
@@ -218,10 +257,8 @@ static irq_handler_t acline_calibration_irq_handler(unsigned int irq, void *dev_
 }
 
 /* Standard IRQ routine that will install handler on RISING edge only.
- * Due to negative and positive cycles assymetry, calibration.opto_hysteresis
- * value is used to correct timestamps.
- * Also, the RISING edge triggers occurs BEFORE AC mains reaches zero, so
- * it is very usefull, as we have calibration.opto_hysteresis microseconds
+ * The RISING edge trigger occurs BEFORE AC mains reaches zero, so
+ * it is very usefull, as we have calibration.opto_hysteresis nanoseconds
  * of grace time to perform some complex calculations before we start doing
  * something else (like triggering TRIACs)
  */
@@ -229,9 +266,7 @@ static int acline_irq_start(void)
 {   
 	irqNumber = gpio_to_irq(opto_input);
 	
-	printk(KERN_INFO "IRQs acline: %u\t32: %u\t42: %u\n", irqNumber, gpio_to_irq(32), gpio_to_irq(42));
-	
-	if (request_threaded_irq(irqNumber, (irq_handler_t)acline_gpio_irq_handler, (irq_handler_t)acline_gpio_irq_handler_thread, IRQF_TRIGGER_RISING, "lineAC", NULL)) {
+	if (request_irq(irqNumber, (irq_handler_t)acline_gpio_irq_handler, IRQF_TRIGGER_RISING | IRQF_SHARED, "lineAC", (void *)(acline_gpio_irq_handler))) {
 		printk(KERN_ERR "IRQ %d: could not request\n", irqNumber);
 		return -EIO;
 	}
@@ -243,43 +278,21 @@ static int acline_irq_start(void)
 	
 static void acline_irq_end(void)
 {
-	free_irq(irqNumber, NULL);
+	free_irq(irqNumber, (void *)(acline_gpio_irq_handler));
 	return;
 }
 
-//TODO:  ver si puedo cambiar esto. Es necesario el thread?? quiza puedo
-//	manipular el timestamp para corregirle el opto_hysteresis, y disparar
-//	los threads inmediatamente sin tener que andar esperando
+/* Very simple IRQ handler that will precisely calculate period time */
 static irq_handler_t acline_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs)
 {
-	/* Check if interrupt was due to ACLINE change */
-	if (gpio_get_value(opto_input)) {
+	if (dev_id == (void *)(acline_gpio_irq_handler)) {
 		acline_phase.old_timestamp = acline_phase.timestamp;
 		acline_phase.timestamp = ktime_get();
 		acline_phase.period_time = ktime_sub(acline_phase.timestamp, acline_phase.old_timestamp);
-		
-		//Calculations ready, wake up update task
-// 		if (!IS_ERR_OR_NULL(update_task))
-// 			wake_up_process(update_task); //Now we have OPTO_HYSTERESIS_TIME to perform complex calculations
-		return (irq_handler_t)IRQ_WAKE_THREAD;
+		return (irq_handler_t)IRQ_HANDLED;
 	}
 	else
-		return (irq_handler_t)IRQ_HANDLED;
-}
-
-static irq_handler_t acline_gpio_irq_handler_thread(unsigned int irq, void *dev_id, struct pt_regs *regs)
-{
-	ktime_t delay = ktime_set(0, calibration.opto_hysteresis - 50 * USEC_TO_NANOSEC);
-	
-	schedule_hrtimeout(&delay, HRTIMER_MODE_REL); //Go to sleep, then wake up triac phase threads
-	
-	//Wake up TRIAC threads if active
-// 	for (i=0; i < (triac_vector_len - 1); i++) { //Excludes ACLINE
-// 		if (atomic_read(&triac[i].phase_task_status) == STARTED)
-// 			wake_up_process(triac[i].phase_task);
-// 	}
-	
-	return (irq_handler_t)IRQ_HANDLED;	  // Announce that the IRQ has been handled correctly
+		return (irq_handler_t)IRQ_NONE;
 }
 
 

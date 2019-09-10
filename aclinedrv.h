@@ -12,6 +12,7 @@
 #include <linux/kernel.h>
 #include <linux/kobject.h>
 #include <linux/sysfs.h>
+#include <linux/device.h>
 #include <linux/moduleparam.h>
 
 MODULE_LICENSE("GPL");
@@ -73,27 +74,32 @@ static struct calib {
 	unsigned int opto_hysteresis;
 } calibration;
 
+static struct kobject *acline_kobject;
+
+/* Exported functions */
 ktime_t acline_get_sync_timestamp(void);
 unsigned int acline_get_period(void);
+unsigned int acline_get_optohyst(void);
+unsigned int acline_get_irq(void);
+struct kobject * acline_get_kobject(void);
 
+/* IRQ functions */
 static u64 int_pow(u64 base, unsigned int exp);
 static int acline_irq_start(void);
 static void acline_irq_end(void);
 static irq_handler_t acline_gpio_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs);
-static irq_handler_t acline_gpio_irq_handler_thread(unsigned int irq, void *dev_id, struct pt_regs *regs);
+// static irq_handler_t acline_gpio_irq_handler_thread(unsigned int irq, void *dev_id, struct pt_regs *regs);
 static irq_handler_t acline_calibration_irq_handler(unsigned int irq, void *dev_id, struct pt_regs *regs);
 static int acline_irq_calibrate(void);
 
+/* GPIO functions */
 static int acline_gpio_start(void);
 static void acline_gpio_end(void);
 
-
-static struct kobject *acline_kobject;
-
+/* SYSFS functions */
 static int acline_sysfs_start(void);
 static void acline_sysfs_end(void);
 static ssize_t acline_get_freq(struct kobject *kobj, struct kobj_attribute *attr, char *buff);
-
 static struct kobj_attribute sysfs = __ATTR(freq, 0444, acline_get_freq, NULL);
 
 
