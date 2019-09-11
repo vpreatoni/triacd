@@ -19,8 +19,6 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Victor Preatoni");
 MODULE_DESCRIPTION("OpenIndoor Opto-TRIAC phase driver");
 MODULE_VERSION("0.1");
-/* Remove later, just to avoid Tainted warning */
-MODULE_INFO(intree, "Y");
 
 
 /* Sets name, GPIO pin and positive and negative phase conduction angles

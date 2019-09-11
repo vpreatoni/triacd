@@ -19,8 +19,6 @@ MODULE_LICENSE("GPL");
 MODULE_AUTHOR("Victor Preatoni");
 MODULE_DESCRIPTION("OpenIndoor Optocoupler phase feedback driver");
 MODULE_VERSION("0.1");
-/* Remove later, just to avoid Tainted warning */
-MODULE_INFO(intree, "Y");
 
 /* GPIO5 is the default input on OpenIndoor Opto-TRIAC board
  * It can be easily changed passing argument to insmod:
