@@ -301,7 +301,14 @@ static irq_handler_t acline_gpio_irq_handler(unsigned int irq, void *dev_id, str
  */
 static int acline_gpio_start(void)
 {
-	return (gpio_request_one(opto_input, GPIOF_IN, "ACLINE"));
+	if (gpio_request_one(opto_input, GPIOF_IN, "ACLINE")) {
+		printk(KERN_ERR "AC LINE: cannot claim GPIO %02u\n", opto_input);
+		return -EIO;
+	}
+	else {
+		printk(KERN_INFO "AC LINE: GPIO %02u\n", opto_input);
+		return 0;
+	}
 }
 
 static void acline_gpio_end(void)

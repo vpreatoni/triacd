@@ -1,4 +1,5 @@
 /*
+ * TODO: state machine must be moved here, so a single GPIO driver is used (on, off, sym, asym)
  * triacdrv.c - triggers a single TRIAC according to requested conduction
  * angle.
  * 
@@ -17,7 +18,7 @@
  * generated. Useful for obtaining a positive or negative DC value
  * for motor control or Peltier cells.
  * 
- * It provides also provides a sysfs interface for changing phase angles
+ * It also provides a sysfs interface for runtime changing phase angles
  *
  * Copyright (C) 2019 Victor Preatoni
  */
@@ -30,7 +31,9 @@
  */
 static int triacdrv_sysfs_start(void)
 {
+	/* Module requires aclinedrv.ko to be running */
 	triacdrv_kobject = acline_get_kobject();
+	
 	sysfs.attr.name = name;
 
 	if (triacdrv_kobject) {
@@ -49,7 +52,6 @@ static int triacdrv_sysfs_start(void)
 
 static void triacdrv_sysfs_end(void)
 {
-// 	kobject_put(triacdrv_kobject);
 	sysfs_remove_file(triacdrv_kobject, &sysfs.attr);
 	return;
 }
@@ -105,7 +107,11 @@ static ssize_t triacdrv_get(struct kobject *kobj, struct kobj_attribute *attr, c
 	return count;
 }
 
-/* Will convert angle to nanoseconds */
+/* Will convert angle to nanoseconds
+ * In case phase is zero, will returno zero and not period_ns / 2
+ * as expected.
+ * This allows pulse skipping
+ */
 static unsigned int triacdrv_phase_to_ns(unsigned int phase, unsigned int period_ns)
 {
 	return (phase ? ((180 - phase) * period_ns / 360) : 0);
@@ -172,10 +178,24 @@ static irq_handler_t triacdrv_gpio_irq_handler_thread(unsigned int irq, void *de
 	unsigned int period_ns;
 	unsigned int pos_phase_ns;
 	unsigned int neg_phase_ns;
+	unsigned int pos_phase = atomic_read(&phase.pos);
+	unsigned int neg_phase = atomic_read(&phase.neg);
+	
+	/* If both phases are zero, turn off triac */
+	if (!pos_phase && !neg_phase) {
+		gpio_set_value(gpio, 0);
+		return (irq_handler_t)IRQ_HANDLED;
+	}
+	
+	/* If both phases are 180, fully turn on triac */
+	if (pos_phase == 180 && neg_phase == 180) {
+		gpio_set_value(gpio, 1);
+		return (irq_handler_t)IRQ_HANDLED;
+	}
 	
 	period_ns = acline_get_period();
-	pos_phase_ns = triacdrv_phase_to_ns(atomic_read(&phase.pos), period_ns);
-	neg_phase_ns = triacdrv_phase_to_ns(atomic_read(&phase.neg), period_ns);
+	pos_phase_ns = triacdrv_phase_to_ns(pos_phase, period_ns);
+	neg_phase_ns = triacdrv_phase_to_ns(neg_phase, period_ns);
 	
 	irq_timestamp = ktime_add_ns(acline_get_sync_timestamp(), acline_get_optohyst());
 	
