@@ -12,12 +12,15 @@
 #include <errno.h>
 #include <sys/stat.h>
 
-#include "globals.h"
+// #include "globals.h"
 
-
+/* Board properties */
+#define MAX_TRIACS				4
+/* Where to print messages */
+#define FPRINTF_FD				stdout
 /* Message queue name for client-daemon IPC */
-#define QUEUE_NAME		"/triacd_q"
-#define BUFF_SIZE    	128
+#define QUEUE_NAME				"/triacd_q"
+#define BUFF_SIZE    			128
 /* Time constants */
 #define USEC_TO_NANOSEC			1000U
 #define MSEC_TO_NANOSEC			(1000U * USEC_TO_NANOSEC)
@@ -28,6 +31,7 @@
 
 extern unsigned int board_init_channels(void);
 extern void board_free_channels(void);
+extern void board_update_channel(unsigned int, bool, unsigned int, unsigned int, unsigned int);
 extern void statem_loop(void);
 
 
@@ -51,7 +55,7 @@ union msg_q {
 	char message[sizeof(struct triac_data)];
 };
 
-
+void triacd_sigterm(int);
 int triacd_main_loop(void);
 int triacd_set_params(int, bool, int, int, int);
 void triacd_refresh_params(struct triac_data);

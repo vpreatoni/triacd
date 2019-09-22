@@ -11,7 +11,6 @@
 #include <errno.h>
 #include <string.h>
 
-#include "globals.h"
 #include "eeptypes.h"
 
 /* EEPROM defaults */
@@ -23,6 +22,8 @@
 #define I2C_BUS						0
 /* Max number of in / out pins board may have */
 #define MAX_PINS					4
+/* Where to print messages */
+#define FPRINTF_FD					stdout
 
 /* Global struct to fill while reading EEPROM */
 static struct hat_info {

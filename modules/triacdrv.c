@@ -108,7 +108,7 @@ static ssize_t triacdrv_get(struct kobject *kobj, struct kobj_attribute *attr, c
 }
 
 /* Will convert angle to nanoseconds
- * In case phase is zero, will returno zero and not period_ns / 2
+ * In case phase is zero, will return zero and not period_ns / 2
  * as expected.
  * This allows pulse skipping
  */
@@ -181,17 +181,28 @@ static irq_handler_t triacdrv_gpio_irq_handler_thread(unsigned int irq, void *de
 	unsigned int pos_phase = atomic_read(&phase.pos);
 	unsigned int neg_phase = atomic_read(&phase.neg);
 	
-	/* If both phases are zero, turn off triac */
-	if (!pos_phase && !neg_phase) {
+	/* If both phases are near zero, turn off triac */
+	if (pos_phase < (0 + PHASE_GUARD) && neg_phase < (0 + PHASE_GUARD)) {
 		gpio_set_value(gpio, 0);
 		return (irq_handler_t)IRQ_HANDLED;
 	}
 	
-	/* If both phases are 180, fully turn on triac */
-	if (pos_phase == 180 && neg_phase == 180) {
+	/* If both phases are near 180, fully turn on triac */
+	if (pos_phase > (180 - PHASE_GUARD) && neg_phase > (180 - PHASE_GUARD)) {
 		gpio_set_value(gpio, 1);
 		return (irq_handler_t)IRQ_HANDLED;
 	}
+	
+	/* Bound edge values to avoid triggering near zero-crossings */
+	if (pos_phase > (180 - PHASE_GUARD))
+		pos_phase = (180 - PHASE_GUARD);
+	else if (pos_phase < (0 + PHASE_GUARD))
+		pos_phase = 0;
+	
+	if (neg_phase > (180 - PHASE_GUARD))
+		neg_phase = (180 - PHASE_GUARD);
+	else if (neg_phase < (0 + PHASE_GUARD))
+		neg_phase = 0;
 	
 	period_ns = acline_get_period();
 	pos_phase_ns = triacdrv_phase_to_ns(pos_phase, period_ns);

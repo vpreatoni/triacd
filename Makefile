@@ -7,11 +7,11 @@ CC = gcc
 CFLAGS  = -g -Wall -std=gnu99
 
 #files
-OBJFILES = triacd.o optoboard.o hat.o statemachine.o
+OBJFILES = triacd.o optoboard.o hat.o fader.o
 
 # the build target executable:
 TARGET = triacd
-LIBS = -lrt
+LIBS += -lrt -pthread
 
 all: $(TARGET)
 

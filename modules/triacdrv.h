@@ -57,6 +57,11 @@ extern struct kobject * acline_get_kobject(void);
 #define HIGH_CONDUCTION_ANGLE	1500U * USEC_TO_NANOSEC
 #define TRIAC_TRIGGER_PULSE		10U //us
 #define TRIAC_LONG_PULSE		500U //us
+/* Phase guard degrees
+ * eg: how many degrees close to edge
+ * values will be ignored
+ */
+#define PHASE_GUARD				7
 
 /* Declared atomic to avoid mutexes */
 struct triac_phase_atomic {

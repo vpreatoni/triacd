@@ -3,16 +3,11 @@
  * Used with systemd, it creates a service daemon to control OpenIndoor
  * Opto-TRIAC board.
  * 
- * It can also run on stand-alone mode, or you can pass command line arguments
+ * It can also run on stand-alone mode. Allows passing command line arguments
  * to control triacd daemon.
  * 
  * triacd will launch required kernel modules (aclinedrv.ko and triacNdrv.ko)
- * if it is required by state machine.
- * Eg: if TRIAC is set to fully on or fully off, no kernel module is necesary
- * since TRIAC can be controlled by a single GPIO pulse.
- * 
- * Instead, if a phase control mechanism is requested, triacd will launch
- * a triacNdrv.ko instance due to strict timing requirements.
+ * according to how many channels are configured on HAT EEPROM.
  *
  * Copyright (C) 2019 Victor Preatoni
  */
@@ -21,7 +16,7 @@
 
 
 /* SIGINT and SIGTERM catcher */
-void term(int signum)
+void triacd_sigterm(int signum)
 {
 	daemon_stop = 1;
 }
@@ -156,20 +151,7 @@ void triacd_refresh_params(struct triac_data triac_params)
 	
 	i = triac_params.channel - 1;
 	if (i < max_channels)
-		if (triac[i].gpio.status == enabled) {
-			triac[i].phase.pos = triac_params.pos;
-			triac[i].phase.neg = triac_params.neg;
-			if (triac_params.fade) {
-				triac[i].fader.remaining_time = triac_params.time;
-				if (triac[i].fader.status != STARTED)
-					triac[i].fader.status = ABOUT_TO_START;
-			}
-			fprintf(FPRINTF_FD, "%s request:\n", triac[i].gpio.label);
-			if (triac_params.fade)
-				fprintf(FPRINTF_FD, "\tfading time %ums\n", triac_params.time);
-			fprintf(FPRINTF_FD, "\tpos phase %udeg\n", triac_params.pos);
-			fprintf(FPRINTF_FD, "\tneg phase %udeg\n", triac_params.neg);
-		}
+		board_update_channel(triac_params.channel, triac_params.fade, triac_params.time, triac_params.pos, triac_params.neg);
 	
 	return;
 }
@@ -185,7 +167,7 @@ mqd_t triacd_init_mq(void)
 	attr.mq_msgsize = sizeof(struct triac_data);
 	
 	/* create the message queue */
-	mq = mq_open(QUEUE_NAME, O_CREAT | O_RDONLY, 0644, &attr);
+	mq = mq_open(QUEUE_NAME, O_CREAT | O_RDONLY | O_NONBLOCK, 0644, &attr);
 	
 	return mq;
 }
@@ -206,7 +188,7 @@ void triacd_init_signals(void)
 	
 	/* install signal handlers */
 	memset(&action, 0, sizeof(struct sigaction));
-	action.sa_handler = term;
+	action.sa_handler = triacd_sigterm;
 	sigaction(SIGTERM, &action, NULL);
 	sigaction(SIGINT, &action, NULL);
 	
@@ -241,10 +223,9 @@ int triacd_main_loop(void)
 	
 	/* main loop */
 	while (!daemon_stop) {
-		if (mq_receive(mq, packed_data.message, sizeof(struct triac_data), NULL))
+		if ((mq_receive(mq, packed_data.message, sizeof(struct triac_data), NULL)) > 0)
 			triacd_refresh_params(packed_data.triac);
 		
-		/* actualiza estados de acuerdo a los parametros (sym, asym, on, off, fading) */
 		statem_loop();
 		
 		usleep(THREAD_LATENCY);
