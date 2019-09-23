@@ -98,7 +98,7 @@ int triacd_set_params(int channel, bool fade, int time, int pos, int neg)
 		return EXIT_FAILURE;
 	}
 	
-	if (fade && time == 0) {
+	if (fade && (pos || neg) && time == 0) {
 		fprintf(FPRINTF_FD, "Must define fade time: -t [msec]\n");
 		return EXIT_FAILURE;
 	}

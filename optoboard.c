@@ -51,19 +51,17 @@ void board_update_channel(unsigned int n, bool fade, unsigned int time, unsigned
 	unsigned int i = n - 1;
 	 
 	if (triac[i].gpio.status == enabled) {
-// 		fprintf(FPRINTF_FD, "%s request:\n", triac[i].gpio.label);
-		if (fade) {
-// 			fprintf(FPRINTF_FD, "\tfading time %ums\n", time);
-			fader_start(i, time, pos, neg);
-		}
+		if (fade)
+			if (!time)
+				fader_stop(i);
+			else
+				fader_start(i, time, pos, neg);
 		else {
 			fader_stop(i);
 			triac[i].phase.pos = pos;
 			triac[i].phase.neg = neg;
 			triac[i].phase.refresh = true;
 		}
-// 		fprintf(FPRINTF_FD, "\tpos phase %udeg\n", pos);
-// 		fprintf(FPRINTF_FD, "\tneg phase %udeg\n", neg);
 	}
 	
 	return;
