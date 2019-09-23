@@ -12,7 +12,8 @@
 #include <errno.h>
 #include <sys/stat.h>
 
-// #include "globals.h"
+#define MAJOR_VERSION			0
+#define MINOR_VERSION			1
 
 /* Board properties */
 #define MAX_TRIACS				4

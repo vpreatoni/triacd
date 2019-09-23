@@ -1,3 +1,5 @@
+# TODO  agregar make install que lo instale en systemd
+
 # the compiler: gcc for C program, define as g++ for C++
 CC = gcc
 

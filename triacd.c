@@ -23,12 +23,15 @@ void triacd_sigterm(int signum)
 
 void triacd_print_params(char *argv)
 {
+	fprintf(FPRINTF_FD, "\nOpenIndoor Opto-TRAIC daemon control\n");
+	fprintf(FPRINTF_FD, "triacd version: %u.%u\n\n", MAJOR_VERSION, MINOR_VERSION);
 	fprintf(FPRINTF_FD, "Usage:\n");
 	fprintf(FPRINTF_FD, "No parameter\tto start triacd daemon\n");
 	fprintf(FPRINTF_FD, "-c [1-4]\tto select TRIAC channel\n");
 	fprintf(FPRINTF_FD, "-f\t\tto start fade-in or fade-out\n");
 	fprintf(FPRINTF_FD, "-t [msec]\tto define fade-in or fade-out time\n");
 	fprintf(FPRINTF_FD, "\t\t* Fader requires a fade-time. If no conduction angle passed, fader will fade out to zero\n");
+	fprintf(FPRINTF_FD, "\t\t* If no fade-time is passed, fader will immediately stop\n");
 	fprintf(FPRINTF_FD, "-p [0-180]\tto define positive phase conduction degrees\n");
 	fprintf(FPRINTF_FD, "-n [0-180]\tto define negative phase conduction degrees\n");
 	fprintf(FPRINTF_FD, "\t\t* If no negative angle passed, TRIAC will work on symmetric phase mode\n");
@@ -36,8 +39,8 @@ void triacd_print_params(char *argv)
 	fprintf(FPRINTF_FD, "\nEg: %s -c4 -f -t5000 -p110\tto start fading channel 4 for 5sec up to 110deg\n", argv);
 	fprintf(FPRINTF_FD, "    %s -c1 -p110 -n30\t\tto set channel 1 to 110deg positive / 30deg negative\n", argv);
 	fprintf(FPRINTF_FD, "    %s -c2\t\t\tto turn off channel 2\n", argv);
-	fprintf(FPRINTF_FD, "    %s -c3 -t3000\t\t\tto turn off channel 3 after 3sec\n", argv);
-	fprintf(FPRINTF_FD, "    %s -c1 -t20000 -p180\t\tto fully turn on channel 1 after 20sec\n", argv);
+// 	fprintf(FPRINTF_FD, "    %s -c3 -t3000\t\t\tto turn off channel 3 after 3sec\n", argv); //TODO
+// 	fprintf(FPRINTF_FD, "    %s -c1 -t20000 -p180\t\tto fully turn on channel 1 after 20sec\n", argv); //TODO
 	return;
 }
 
@@ -166,13 +169,18 @@ mqd_t triacd_init_mq(void)
 	attr.mq_maxmsg = 10;
 	attr.mq_msgsize = sizeof(struct triac_data);
 	
+	/* Check if mq was already created
+	 *That means another daemon is running
+	 */
+	if ((mq = mq_open(QUEUE_NAME, O_WRONLY)) != (mqd_t) -1)
+		return (mqd_t) -1;
+	
 	/* create the message queue */
 	mq = mq_open(QUEUE_NAME, O_CREAT | O_RDONLY | O_NONBLOCK, 0644, &attr);
 	
 	return mq;
 }
 
-/* Daemon message queue initializer */
 void triacd_end_mq(mqd_t mq)
 {
 	mq_close(mq);
@@ -207,7 +215,7 @@ int triacd_main_loop(void)
 	
 	mq = triacd_init_mq();
 	if (mq == (mqd_t) -1) {
-		fprintf(FPRINTF_FD, "Message queue error: %d - %s\n", errno, strerror(errno));
+		fprintf(FPRINTF_FD, "Error: is another triacd daemon running?\n");
 		return(EXIT_FAILURE);
 	}
 	
@@ -219,7 +227,6 @@ int triacd_main_loop(void)
 		fprintf(FPRINTF_FD, "%u channels configured\n", max_channels);
 	else
 		fprintf(FPRINTF_FD, "Error: no channels configured. Is EEPROM valid?\n");
-// 	statem_init_threads(); necesario? o mudarlo a un fader.c q tenga toda la logica del fader en si.
 	
 	/* main loop */
 	while (!daemon_stop) {
