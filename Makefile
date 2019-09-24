@@ -37,7 +37,10 @@ install: $(TARGET)
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
 	cp $(TARGET) $(DESTDIR)$(PREFIX)/bin/$(TARGET)
 	cp $(TARGET).service $(DESTDIR)/etc/systemd/system
+	systemctl enable $(TARGET)
 
 uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/$(TARGET)
+	systemctl disable $(TARGET)
 	rm -f $(DESTDIR)/etc/systemd/system/$(TARGET).service
+	rm -f $(DESTDIR)$(PREFIX)/bin/$(TARGET)
+	

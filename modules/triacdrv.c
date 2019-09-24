@@ -1,5 +1,4 @@
 /*
- * TODO: state machine must be moved here, so a single GPIO driver is used (on, off, sym, asym)
  * triacdrv.c - triggers a single TRIAC according to requested conduction
  * angle.
  * 

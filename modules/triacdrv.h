@@ -20,6 +20,11 @@ MODULE_AUTHOR("Victor Preatoni");
 MODULE_DESCRIPTION("OpenIndoor Opto-TRIAC phase driver");
 MODULE_VERSION("0.1");
 
+static const struct of_device_id triac_of_match[] = {
+	{ .compatible = "triacboard,quadtriac,dualtriac", },
+	{ /* end of list */ },
+};
+MODULE_DEVICE_TABLE(of, triac_of_match);
 
 /* Sets name, GPIO pin and positive and negative phase conduction angles
  * eg: insmod triac1drv.ko name=mytriac gpio=6 pos=40 neg=30

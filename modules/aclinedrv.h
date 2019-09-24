@@ -20,6 +20,12 @@ MODULE_AUTHOR("Victor Preatoni");
 MODULE_DESCRIPTION("OpenIndoor Optocoupler phase feedback driver");
 MODULE_VERSION("0.1");
 
+static const struct of_device_id triac_of_match[] = {
+	{ .compatible = "triacboard,quadtriac,dualtriac", },
+	{ /* end of list */ },
+};
+MODULE_DEVICE_TABLE(of, triac_of_match);
+
 /* GPIO5 is the default input on OpenIndoor Opto-TRIAC board
  * It can be easily changed passing argument to insmod:
  * eg: insmod aclinedrv.ko opto_input=20
