@@ -9,7 +9,7 @@ triac2drv-objs := triacdrv.o
 triac3drv-objs := triacdrv.o
 triac4drv-objs := triacdrv.o
 
-ccflags-y := -std=gnu99 -Wno-declaration-after-statement 
+ccflags-y := -std=gnu99 -Wall
 
 
 all:
