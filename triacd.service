@@ -1,0 +1,9 @@
+[Unit]
+Description=Opto-TRIAC board daemon
+
+[Service]
+Type=simple
+ExecStart=triacd
+
+[Install]
+WantedBy=multi-user.target
