@@ -1,4 +1,4 @@
-# OpenIndoor Opto-TRIAC Raspebrry Pi HAT driver
+# OpenIndoor Opto-TRIAC Raspberry Pi HAT driver
 
 User-mode and Kernel-mode driver for Opto-TRIAC HAT
 
