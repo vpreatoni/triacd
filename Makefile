@@ -16,7 +16,7 @@ CC = gcc
 CFLAGS  += -Wall -std=gnu99
 
 #files
-OBJFILES = triacd.o optoboard.o hat.o fader.o
+OBJFILES = triacd.o optoboard.o fader.o
 
 # the build target executable:
 TARGET = triacd
@@ -35,7 +35,7 @@ clean:
 	
 install: $(TARGET)
 	mkdir -p $(DESTDIR)$(PREFIX)/bin
-	cp $(TARGET) $(DESTDIR)$(PREFIX)/bin/$(TARGET)
+	cp $(TARGET) $(DESTDIR)$(PREFIX)/bin
 	cp $(TARGET).service $(DESTDIR)/etc/systemd/system
 	systemctl enable $(TARGET)
 

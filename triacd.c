@@ -150,7 +150,7 @@ int triacd_set_params(int channel, bool fade, int time, int pos, int neg)
  */
 void triacd_refresh_params(struct triac_data triac_params)
 {
-	unsigned int i;
+	int i;
 	
 	i = triac_params.channel - 1;
 	if (i < max_channels)
@@ -164,6 +164,7 @@ mqd_t triacd_init_mq(void)
 {
 	mqd_t mq;
 	struct mq_attr attr;
+	mode_t omask;
 	
 	/* initialize the queue attributes */
 	attr.mq_maxmsg = 10;
@@ -175,8 +176,12 @@ mqd_t triacd_init_mq(void)
 	if ((mq = mq_open(QUEUE_NAME, O_WRONLY)) != (mqd_t) -1)
 		return (mqd_t) -1;
 	
+	/* use permissions as specified */
+	omask = umask(0);
 	/* create the message queue */
-	mq = mq_open(QUEUE_NAME, O_CREAT | O_RDONLY | O_NONBLOCK, 0644, &attr);
+	mq = mq_open(QUEUE_NAME, O_CREAT | O_RDONLY | O_NONBLOCK, 0666, &attr);
+	/* restore permissions */
+	umask(omask);
 	
 	return mq;
 }
@@ -211,8 +216,6 @@ int triacd_main_loop(void)
 	union msg_q packed_data;
 	
 	
-	fprintf(FPRINTF_FD, "Starting main loop...\n");
-	
 	mq = triacd_init_mq();
 	if (mq == (mqd_t) -1) {
 		fprintf(FPRINTF_FD, "Error: is another triacd daemon running?\n");
@@ -225,10 +228,14 @@ int triacd_main_loop(void)
 	max_channels = board_init_channels();
 	if (max_channels)
 		fprintf(FPRINTF_FD, "%u channels configured\n", max_channels);
-	else
-		fprintf(FPRINTF_FD, "Error: no channels configured. Is EEPROM valid?\n");
+	else {
+		fprintf(FPRINTF_FD, "Error: no channels configured\n\tIs EEPROM valid?\n\tAre Kernel modules installed?\n");
+		triacd_end_mq(mq);
+		return(EXIT_FAILURE);
+	}
 	
-	/* main loop */
+	
+	fprintf(FPRINTF_FD, "Starting main loop...\n");
 	while (!daemon_stop) {
 		if ((mq_receive(mq, packed_data.message, sizeof(struct triac_data), NULL)) > 0)
 			triacd_refresh_params(packed_data.triac);

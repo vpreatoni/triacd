@@ -1,14 +1,22 @@
 #include "fader.h"
 
 /* Initializes fader pointers and variables */
-void fader_init(struct triac_status *triac)
+void fader_init(struct triac_status *triac, unsigned int channels)
 {
 	unsigned int i;
+	
+	triac_fade_len = channels;
+	
+	/* Allocate memory for struct triac_status vector */
+	fader = calloc(triac_fade_len, sizeof(struct triac_fade));
+	if (fader == NULL)
+		return;
+	
 	
 	/* Struct fader will have a pointer to actual triac phase structure
 	 * so fader can modify data pointed by struct triac_phase *
 	 */
-	for (i = 0; i < MAX_TRIACS; i++) {
+	for (i = 0; i < triac_fade_len; i++) {
 		fader[i].status = STOPPED;
 		fader[i].phase = &triac[i].phase;
 	}

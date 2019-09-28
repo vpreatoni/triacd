@@ -67,42 +67,104 @@ void board_update_channel(unsigned int n, bool fade, unsigned int time, unsigned
 	return;
 }
 
-/* Reads EEPROM and initializes struct triac_status.gpio
- * according to EEPROM values, or to default ones if no EEPROM
- * could be read.
+/* Reads HAT and initializes struct triac_status.gpio
+ * according to HAT Devie-Tree parameters.
  * 
  * Returns the number of configured channels [0-4].
  * User should catch 0, since means NO channels available.
  */
 unsigned int board_init_channels(void)
 {
-	int pin;
-	unsigned int i, channels;
+	unsigned int i, channels, version, gpio_pin;
 	
-	/* initializes global variables */
-	for (i = 0; i < MAX_TRIACS; i++) {
-		triac[i].gpio.status = disabled;
-		triac[i].phase.refresh = false;
-	}
+	int fd;
+	char buffer[128];
+	char filename[128];
 	
-	fader_init(triac);
+	/* Read vendor string */
+	sprintf(filename, "%s/%s", HAT_DIR, HAT_VENDOR_FILE);
+	fd = open(filename, O_RDONLY);
+	if (read(fd, buffer, sizeof(buffer)) == -1)
+		goto read_error;
+	else
+		fprintf(FPRINTF_FD, "%s HAT detected!\n", buffer);
+	close(fd);
 	
-	if (hat_read_eeprom()) {
-		/* Failed to read EEPROM */
-		fprintf(FPRINTF_FD, "board_init_channels: no EEPROM could be read. Assuming defaults\n");
-		if (board_start_acline(DEFAULT_ACLINE_PIN))
-			/* Error */
-			return 0;
-		
-		triac[0].gpio.pin = DEFAULT_TRIAC1_PIN;
-		triac[1].gpio.pin = DEFAULT_TRIAC2_PIN;
-		triac[2].gpio.pin = DEFAULT_TRIAC3_PIN;
-		triac[3].gpio.pin = DEFAULT_TRIAC4_PIN;
-		for (channels = 0, i = 0; i < MAX_TRIACS; i++) {
+	/* Read product string */
+	sprintf(filename, "%s/%s", HAT_DIR, HAT_PRODUCT_FILE);
+	fd = open(filename, O_RDONLY);
+	if (read(fd, buffer, sizeof(buffer)) == -1)
+		goto read_error;
+	else
+		fprintf(FPRINTF_FD, "\t%s", buffer);
+	close(fd);
+
+	/* Read HAT version uint32 */
+	sprintf(filename, "%s/%s", HAT_DIR, HAT_VERSION_FILE);
+	fd = open(filename, O_RDONLY);
+	if (read(fd, &version, sizeof(version)) == -1)
+		goto read_error;
+	else
+		fprintf(FPRINTF_FD, "\tv%u.%u\n", (ntohl(version) & 0x0000FF00) >> 8, (ntohl(version) & 0x000000FF));
+	close(fd);
+
+	
+	/* Read input channels uint32 */
+	sprintf(filename, "%s/%s/%s", HAT_DIR, HAT_INPUTS_DIR, HAT_IO_CHANNELS);
+	fd = open(filename, O_RDONLY);
+	if (read(fd, &channels, sizeof(channels)) == -1)
+		goto read_error;
+	close(fd);
+	
+	/* Read input channel N pin */
+	sprintf(filename, "%s/%s/%u/%s", HAT_DIR, HAT_INPUTS_DIR, ntohl(channels), HAT_GPIO_PIN);
+	fd = open(filename, O_RDONLY);
+	if (read(fd, &gpio_pin, sizeof(gpio_pin)) == -1)
+		goto read_error;
+	close(fd);
+	
+	if (board_start_acline(ntohl(gpio_pin)))
+		fprintf(FPRINTF_FD, "board_init_channels error: no input pin found\n");
+	else
+		fprintf(FPRINTF_FD, "board_init_channels: input pin found - %02u\n", ntohl(gpio_pin));
+	
+	
+	/* Read output channels uint32 */
+	sprintf(filename, "%s/%s/%s", HAT_DIR, HAT_OUTPUTS_DIR, HAT_IO_CHANNELS);
+	fd = open(filename, O_RDONLY);
+	if (read(fd, &triac_status_len, sizeof(triac_status_len)) == -1)
+		goto read_error;
+	close(fd);
+	
+	/* fixup endianess */
+	triac_status_len = ntohl(triac_status_len);
+	
+	/* Allocate memory for struct triac_status vector */
+	triac = calloc(triac_status_len, sizeof(struct triac_status));
+	if (triac == NULL)
+		goto ptr_error;
+	
+	for (i = 0, channels = 0; i < triac_status_len; i++) {
+		/* Read output channel N pin */
+		sprintf(filename, "%s/%s/%u/%s", HAT_DIR, HAT_OUTPUTS_DIR, (i + 1), HAT_GPIO_PIN);
+		fd = open(filename, O_RDONLY);
+		if (read(fd, &gpio_pin, sizeof(gpio_pin)) == -1) {
+			triac[i].gpio.status = error;
+			close(fd);
+		}
+		else {
+			close(fd);
+			triac[i].gpio.pin = ntohl(gpio_pin);
 			triac[i].phase.pos = 0;
 			triac[i].phase.neg = 0;
 			triac[i].phase.status = off;
-			sprintf(triac[i].gpio.label, "%s%u", DEFAULT_TRIAC_NAME, i + 1);
+			/* Read output channel N name */
+			sprintf(filename, "%s/%s/%u/%s", HAT_DIR, HAT_OUTPUTS_DIR, (i + 1), HAT_GPIO_LABEL);
+			fd = open(filename, O_RDONLY);
+			if (read(fd, triac[i].gpio.label, sizeof(triac[i].gpio.label)) == -1)
+				sprintf(triac[i].gpio.label, "nnn%u", i + 1);
+			close(fd);
+			
 			if (board_start_triacdrv(i + 1, triac[i].gpio.pin, triac[i].gpio.label)) {
 				fprintf(FPRINTF_FD, "board_init_channels: error - cannot start triac%udrv module\n", i + 1);
 				triac[i].gpio.status = error;
@@ -113,38 +175,21 @@ unsigned int board_init_channels(void)
 			}
 		}
 	}
-	else {
-		/* EEPROM read successful */
-		pin = hat_get_next_in();
-		if (pin != -1)
-			fprintf(FPRINTF_FD, "board_init_channels: input pin found: %d\n", pin);
-		else pin = DEFAULT_ACLINE_PIN;
 		
-		if (board_start_acline(pin))
-			/* Error */
-			return 0;
-		
-		for (channels = 0, i = 0; i < MAX_TRIACS; i++) {
-			if ((pin = hat_get_next_out()) != -1) {
-				fprintf(FPRINTF_FD, "board_init_channels: output pin found: %d\n", pin);
-				triac[i].gpio.pin = pin;
-				triac[i].phase.pos = 0;
-				triac[i].phase.neg = 0;
-				triac[i].phase.status = off;
-				sprintf(triac[i].gpio.label, "%s%u", DEFAULT_TRIAC_NAME, i + 1);
-				if (board_start_triacdrv(i + 1, triac[i].gpio.pin, triac[i].gpio.label)) {
-					fprintf(FPRINTF_FD, "board_init_channels: error - cannot start triac%udrv module\n", i + 1);
-					triac[i].gpio.status = error;
-				}
-				else {
-					triac[i].gpio.status = enabled;
-					channels++;
-				}
-			}
-		}
-	}
-	
+
+	fader_init(triac, triac_status_len);
 	return channels;
+	
+	
+read_error:
+	fprintf(FPRINTF_FD, "board_init_channels read error: %d - %s\n", errno, strerror(errno));
+	close(fd);
+	return 0;
+	
+ptr_error:
+	fprintf(FPRINTF_FD, "board_init_channels: memory error\n");
+	free(triac);
+	return 0;
 }
 
 /* Releases all channels, stops Kernel modules */
@@ -152,7 +197,7 @@ void board_free_channels(void)
 {
 	unsigned int i;
 	
-	for (i = 0; i < MAX_TRIACS; i++) {
+	for (i = 0; i < triac_status_len; i++) {
 		if (triac[i].gpio.status == enabled) {
 			fader_stop(i);
 			board_stop_triacdrv(i + 1);
@@ -162,6 +207,8 @@ void board_free_channels(void)
 	}
 	
 	board_stop_acline();
+	
+	free(triac);
 	
 	return;
 }
@@ -239,7 +286,7 @@ void statem_loop(void)
 	unsigned int i;
 	unsigned int local_pos, local_neg;
 	
-	for (i = 0; i < MAX_TRIACS; i++) {
+	for (i = 0; i < triac_status_len; i++) {
 		if (triac[i].gpio.status == enabled) {
 			local_pos = triac[i].phase.pos;
 			local_neg = triac[i].phase.neg;

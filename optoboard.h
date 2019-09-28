@@ -10,25 +10,23 @@
 #include <stdbool.h>
 #include <errno.h>
 #include <string.h>
+#include <arpa/inet.h>
 
 
 /* Where to print messages */
 #define FPRINTF_FD					stdout
-/* PIN defaults in case cannot read EEPROM */
-#define DEFAULT_ACLINE_PIN			5
-#define DEFAULT_TRIAC1_PIN			26
-#define DEFAULT_TRIAC2_PIN			19
-#define DEFAULT_TRIAC3_PIN			13
-#define DEFAULT_TRIAC4_PIN			6
-/* Board properties */
-#define MAX_TRIACS					4
-
-
-/* TODO: Move this to .conf */
-#define DEFAULT_TRIAC_NAME			"TRIAC"
-#define MODULE_DIR					"/sys/triacd"
-
-
+/* Kernel module sysfs node */
+#define MODULE_DIR				"/sys/triacd"
+/* HAT device-tree node */
+#define HAT_DIR					"/proc/device-tree/triacboard"
+#define HAT_INPUTS_DIR			"/in"
+#define HAT_OUTPUTS_DIR			"/out"
+#define HAT_VENDOR_FILE			"vendor"
+#define HAT_PRODUCT_FILE		"product"
+#define HAT_VERSION_FILE		"version"
+#define HAT_GPIO_LABEL			"label"
+#define HAT_GPIO_PIN			"arm_gpio"
+#define HAT_IO_CHANNELS			"channels"
 
 struct triac_phase {
 	volatile unsigned int pos;
@@ -52,15 +50,13 @@ struct triac_status {
 	struct triac_phase phase;
 };
 
-struct triac_status triac[MAX_TRIACS];
+struct triac_status *triac;
+unsigned int triac_status_len;
 
 
-extern int hat_get_next_in(void);
-extern int hat_get_next_out(void);
-extern int hat_read_eeprom(void);
 extern void fader_start(unsigned int, unsigned int, unsigned int, unsigned int);
 extern void fader_stop(unsigned int);
-extern void fader_init(struct triac_status *);
+extern void fader_init(struct triac_status *, unsigned int);
 
 int board_start_acline(unsigned int);
 void board_stop_acline(void);

@@ -11,8 +11,6 @@
 
 /* Where to print messages */
 #define FPRINTF_FD					stdout
-/* Board properties */
-#define MAX_TRIACS					4
 /* Fader thread status */
 #define STOPPED						0x00
 #define ABOUT_TO_STOP				0x10
@@ -55,12 +53,15 @@ struct triac_fade {
 	unsigned int final_neg;
 	unsigned int time;
 	volatile unsigned int status;
-} fader[MAX_TRIACS];
+};
+
+struct triac_fade *fader;
+unsigned int triac_fade_len;
 
 
 void fader_start(unsigned int, unsigned int, unsigned int, unsigned int);
 void fader_stop(unsigned int);
 void * fader_function(void *arg);
-void fader_init(struct triac_status *);
+void fader_init(struct triac_status *, unsigned int);
 
 #endif //FADER_H
