@@ -102,7 +102,7 @@ static int acline_sysfs_start(void)
 			return -EIO;
 		}
 		else {
-			printk(KERN_INFO "AC LINE: frequency on /sys/%s/%s\n", acline_kobject->name, sysfs.attr.name);
+// 			printk(KERN_INFO "AC LINE: frequency on /sys/%s/%s\n", acline_kobject->name, sysfs.attr.name);
 			return 0;
 		}
 	}
@@ -218,6 +218,7 @@ static int acline_irq_calibrate(void)
 			 * we can now calculate the optocoupler hysteresis
 			 */
 			if (std_neg < (50 * USEC_TO_NANOSEC) && std_pos < (50 * USEC_TO_NANOSEC)) {
+// 				printk(KERN_INFO "stdev: %u %u\n", std_pos, std_neg);
 				calibration.opto_hysteresis = (avg_neg - avg_pos) / 4;
 				return 0; /* IRQ calibrated */
 			}
@@ -250,6 +251,7 @@ static irq_handler_t acline_calibration_irq_handler(unsigned int irq, void *dev_
 				calibration.period_neg[calibration.samples_neg] = ktime_to_ns(ktime_sub(acline_phase.timestamp, acline_phase.old_timestamp));
 				calibration.samples_neg ++;
 			}
+// 			printk(KERN_INFO "calib: %u %u\n", calibration.samples_pos, calibration.samples_neg);
 		}
 	}
 	
@@ -340,7 +342,7 @@ static int __init acline_init(void)
 		calibration.opto_hysteresis = DEFAULT_OPTO_HYSTERESIS;
 	}
 	else
-		printk(KERN_INFO "AC LINE: optocoupler hysteresis = %uus\n", calibration.opto_hysteresis / 1000);
+		printk(KERN_INFO "AC LINE: optocoupler hysteresis = %uus\n", calibration.opto_hysteresis / USEC_TO_NANOSEC);
 		
 	err = acline_irq_start();
 	if (err)

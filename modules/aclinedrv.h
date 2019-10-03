@@ -35,19 +35,15 @@ module_param(opto_input, uint, 0);
 MODULE_PARM_DESC(opto_input, "Sets ARM GPIO pin number used to read phase feedback input. GPIO5 by default.");
 
 /* Time conversion constants */
+#define SEC_TO_MSEC				1000U
 #define USEC_TO_NANOSEC			1000U
 #define MSEC_TO_NANOSEC			(1000U * USEC_TO_NANOSEC)
 #define SEC_TO_NANOSEC			(1000U * MSEC_TO_NANOSEC)
 
 /* sysfs entry node */
 #define SYSFS_NODE  "triacd"
+#define SYSFS_OBJECT  freq
 
-/* Default value in case automatic calibration fails */
-#define DEFAULT_OPTO_HYSTERESIS	320U * USEC_TO_NANOSEC
-/* Buffer lenght for averaging period time */
-#define CALIB_BUFFER_LENGTH		256
-/* Time to perform averaging */
-#define CALIB_TIME_MS			2000
 /* Minimum accepted frequency */
 #define MIN_FREQUENCY			40U //Hz
 /* Maximum accepted frequency */
@@ -56,6 +52,13 @@ MODULE_PARM_DESC(opto_input, "Sets ARM GPIO pin number used to read phase feedba
 #define MIN_PERIOD_ns			(SEC_TO_NANOSEC / MAX_FREQUENCY)
 /* Maximum accepted period */
 #define MAX_PERIOD_ns			(SEC_TO_NANOSEC / MIN_FREQUENCY)
+
+/* Default value in case automatic calibration fails */
+#define DEFAULT_OPTO_HYSTERESIS	(320U * USEC_TO_NANOSEC)
+/* Time to perform averaging */
+#define CALIB_TIME_MS			5000
+/* Buffer lenght for averaging period time */
+#define CALIB_BUFFER_LENGTH		((CALIB_TIME_MS / SEC_TO_MSEC) * MAX_FREQUENCY)
 
 
 static unsigned int irqNumber;
@@ -104,7 +107,7 @@ static void acline_gpio_end(void);
 static int acline_sysfs_start(void);
 static void acline_sysfs_end(void);
 static ssize_t acline_get_freq(struct kobject *kobj, struct kobj_attribute *attr, char *buff);
-static struct kobj_attribute sysfs = __ATTR(freq, 0444, acline_get_freq, NULL);
+static struct kobj_attribute sysfs = __ATTR(SYSFS_OBJECT, 0444, acline_get_freq, NULL);
 
 
 static int __init acline_init(void);
