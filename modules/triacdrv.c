@@ -41,7 +41,7 @@ static int triacdrv_sysfs_start(void)
 			return -EIO;
 		}
 		else {
-			printk(KERN_INFO "%s: GPIO %02u - /sys/%s/%s\n", name, gpio, triacdrv_kobject->name, name);
+			printk(KERN_INFO "%s: GPIO %02u\n", name, gpio);
 			return 0;
 		}
 	}
