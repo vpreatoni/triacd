@@ -57,6 +57,7 @@ unsigned int triac_status_len;
 extern void fader_start(unsigned int, unsigned int, unsigned int, unsigned int);
 extern void fader_stop(unsigned int);
 extern void fader_init(struct triac_status *, unsigned int);
+extern void fader_release(void);
 
 int board_start_acline(unsigned int);
 void board_stop_acline(void);

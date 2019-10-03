@@ -41,6 +41,10 @@ void triacd_print_params(char *argv)
 	fprintf(FPRINTF_FD, "    %s -c2\t\t\tto turn off channel 2\n", argv);
 // 	fprintf(FPRINTF_FD, "    %s -c3 -t3000\t\t\tto turn off channel 3 after 3sec\n", argv); //TODO
 // 	fprintf(FPRINTF_FD, "    %s -c1 -t20000 -p180\t\tto fully turn on channel 1 after 20sec\n", argv); //TODO
+// 	fprintf(FPRINTF_FD, "    %s -c1 -t20000 -p180\t\tto fully turn on channel 1 after 20sec\n", argv); //TODO  get frequency
+// 	fprintf(FPRINTF_FD, "    %s -c1 -t20000 -p180\t\tto fully turn on channel 1 after 20sec\n", argv); //TODO  set rms
+// 	fprintf(FPRINTF_FD, "    %s -c1 -t20000 -p180\t\tto fully turn on channel 1 after 20sec\n", argv); //TODO  get rms
+// 	fprintf(FPRINTF_FD, "    %s -c1 -t20000 -p180\t\tto fully turn on channel 1 after 20sec\n", argv); //TODO  get mean
 	return;
 }
 

@@ -24,12 +24,27 @@ void fader_init(struct triac_status *triac, unsigned int channels)
 	return;
 }
 
+void fader_release(void)
+{
+	unsigned int i;
+	
+	for (i = 0; i < triac_fade_len; i++)
+		fader_stop(i);
+	
+	free(fader);
+	return;
+}
+
 /* Fading thread launcher
  * Parses channel and fading values and launches thread
  * It also controls wether thread is running or not
  */
 void fader_start(unsigned int i, unsigned int time, unsigned int pos_final, unsigned int neg_final)
 {
+	/* Pointer overflow check */
+	if (i >= triac_fade_len)
+		return;
+	
 	/* New fading request. Needs to cancel previous thread and start a new one */
 	if (fader[i].status == STARTED) {
 		fader[i].status = ABOUT_TO_STOP;
@@ -56,7 +71,10 @@ void fader_start(unsigned int i, unsigned int time, unsigned int pos_final, unsi
  */
 void fader_stop(unsigned int i)
 {
-	/* New fading request. Needs to cancel previous thread and start a new one */
+	/* Pointer overflow check */
+	if (i >= triac_fade_len)
+		return;
+	
 	if (fader[i].status == STARTED) {
 		fader[i].status = ABOUT_TO_STOP;
 		pthread_cancel(fader[i].thread);
@@ -80,6 +98,11 @@ bool float_cmp(float x, float y, float epsilon)
 void * fader_function(void *_args)
 {
 	unsigned int i = (unsigned int)_args;
+	
+	/* Pointer overflow check */
+	if (i >= triac_fade_len)
+		pthread_exit(NULL);
+	
 	/* Make backup of globals to work faster and avoid race conditions */
 	unsigned int local_pos = fader[i].phase->pos;
 	unsigned int local_neg = fader[i].phase->neg;

@@ -63,5 +63,6 @@ void fader_start(unsigned int, unsigned int, unsigned int, unsigned int);
 void fader_stop(unsigned int);
 void * fader_function(void *arg);
 void fader_init(struct triac_status *, unsigned int);
+void fader_release(void);
 
 #endif //FADER_H

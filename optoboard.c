@@ -197,9 +197,10 @@ void board_free_channels(void)
 {
 	unsigned int i;
 	
+	fader_release();
+	
 	for (i = 0; i < triac_status_len; i++) {
 		if (triac[i].gpio.status == enabled) {
-			fader_stop(i);
 			board_stop_triacdrv(i + 1);
 			triac[i].gpio.status = disabled;
 			fprintf(FPRINTF_FD, "board_free_channels: channel %u released\n", i + 1);
